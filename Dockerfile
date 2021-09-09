@@ -19,8 +19,6 @@ RUN apt-get update \
     && apt-get install -y ca-certificates tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-EXPOSE 8000
-
 ENV TZ=Etc/UTC \
     APP_USER=appuser \
     RUST_LOG=info
