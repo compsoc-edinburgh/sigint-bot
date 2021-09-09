@@ -10,9 +10,10 @@
 //! ```
 mod commands;
 
-use std::{collections::HashSet, env, sync::Arc};
+use std::{collections::HashSet, fs::read_to_string, sync::Arc};
 
 use commands::welcome::*;
+use serde::Deserialize;
 use serenity::{
     async_trait,
     client::bridge::gateway::ShardManager,
@@ -24,17 +25,15 @@ use serenity::{
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-const SIGINT_GUILD_ID: GuildId = GuildId(754018502058180659);
-
-pub struct ShardManagerContainer;
-pub struct WelcomeFlagContainer;
+pub(crate) struct ShardManagerContainer;
+pub(crate) struct ConfigContainer;
 
 impl TypeMapKey for ShardManagerContainer {
     type Value = Arc<Mutex<ShardManager>>;
 }
 
-impl TypeMapKey for WelcomeFlagContainer {
-    type Value = String;
+impl TypeMapKey for ConfigContainer {
+    type Value = Config;
 }
 
 struct Handler;
@@ -50,6 +49,19 @@ impl EventHandler for Handler {
     }
 }
 
+#[derive(Deserialize)]
+pub(crate) struct Config {
+    discord_token: String,
+    guild_id: u64,
+    welcome: WelcomeConfig,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct WelcomeConfig {
+    flag: String,
+    role_id: u64,
+}
+
 #[group]
 #[commands(welcome)]
 #[only_in(dm)]
@@ -57,8 +69,10 @@ struct General;
 
 #[tokio::main]
 async fn main() {
-    // Load environment variables.
-    dotenv::dotenv().expect("Failed to load .env file");
+    // Load configurations.
+    let config: Config =
+        toml::from_str(&read_to_string("config.toml").expect("Error accessing config.toml"))
+            .expect("Error parsing config.toml");
 
     // Initialize the logger to use environment variables.
     let subscriber = FmtSubscriber::builder()
@@ -67,11 +81,7 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    let welcome_flag =
-        env::var("WELCOME_FLAG").expect("Expected a welcome flag in the environment");
-
-    let http = Http::new_with_token(&token);
+    let http = Http::new_with_token(&config.discord_token);
 
     // We will fetch your bot's owners and id
     let (owners, _bot_id) = match http.get_current_application_info().await {
@@ -89,7 +99,7 @@ async fn main() {
         .configure(|c| c.owners(owners).prefix(":"))
         .group(&GENERAL_GROUP);
 
-    let mut client = Client::builder(&token)
+    let mut client = Client::builder(&config.discord_token)
         .framework(framework)
         .event_handler(Handler)
         .await
@@ -98,7 +108,7 @@ async fn main() {
     {
         let mut data = client.data.write().await;
         data.insert::<ShardManagerContainer>(client.shard_manager.clone());
-        data.insert::<WelcomeFlagContainer>(welcome_flag);
+        data.insert::<ConfigContainer>(config);
     }
 
     let shard_manager = client.shard_manager.clone();

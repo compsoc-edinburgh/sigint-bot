@@ -2,9 +2,13 @@
 
 This Discord bot manages SIGINT's Discord presence and roles.
 
-It requires a `.env` file with the following environment variables defined:
+It requires a `config.toml` file with the following environment variables defined:
 
 ```
-DISCORD_TOKEN=put your token here
-WELCOME_FLAG=flag
+discord_token = <Developer Token>
+guild_id = <Server ID>
+
+[welcome]
+flag = "sigint{test}"
+role_id = <ID of role to assign>
 ```

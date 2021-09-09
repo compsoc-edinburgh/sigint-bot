@@ -1,59 +1,43 @@
-use crate::{WelcomeFlagContainer, SIGINT_GUILD_ID};
+use crate::ConfigContainer;
 use serenity::framework::standard::{macros::command, Args, CommandResult};
 use serenity::model::prelude::*;
 use serenity::prelude::*;
-
-const WELCOME_ROLE_ID: RoleId = RoleId(885293563380895754);
 
 #[command]
 pub async fn welcome(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let flag = args.single::<String>()?;
 
     let data = ctx.data.write().await;
-    let welcome_flag = data
-        .get::<WelcomeFlagContainer>()
-        .expect("Could not get welcome flag from context");
+    let config = data
+        .get::<ConfigContainer>()
+        .expect("Could not get config from context");
+    let sigint_guild = GuildId(config.guild_id);
+    let welcome_role = RoleId(config.welcome.role_id);
 
-    if msg
+    let message = if msg
         .author
-        .has_role(&ctx.http, SIGINT_GUILD_ID, WELCOME_ROLE_ID)
+        .has_role(&ctx.http, sigint_guild, welcome_role)
         .await?
     {
-        msg.author
-            .direct_message(&ctx, |m| {
-                m.content("You already have the \"Curious Hacker\" role.")
-            })
-            .await?;
-    } else if flag == *welcome_flag {
+        "You already have the \"Curious Hacker\" role."
+    } else if flag == config.welcome.flag {
         // Add role to the person DM
-        match SIGINT_GUILD_ID.member(&ctx.http, msg.author.id).await {
+        match sigint_guild.member(&ctx.http, msg.author.id).await {
             Ok(mut member) => {
-                member.add_role(&ctx.http, WELCOME_ROLE_ID).await?;
-
-                msg.author
-                    .direct_message(&ctx, |m| {
-                        m.content("Congratulations! You have earned the \"Curious Hacker\" role!")
-                    })
-                    .await?;
+                member.add_role(&ctx.http, welcome_role).await?;
+                "Congratulations! You have earned the \"Curious Hacker\" role!"
             }
             Err(SerenityError::Http(_)) => {
-                msg.author
-                    .direct_message(&ctx, |m| {
-                        m.content(
-                            "Please join the SIGINT server first! https://discord.gg/WynY7FD3HP",
-                        )
-                    })
-                    .await?;
+                "Please join the SIGINT server first! https://discord.gg/WynY7FD3HP"
             }
-            _ => (),
+            _ => "An error has occurred, please contact SIGINT admin",
         }
     } else {
-        msg.author
-            .direct_message(&ctx, |m| {
-                m.content("I don't think that is the right flag... Try harder!")
-            })
-            .await?;
-    }
+        "I don't think that is the right flag... Try harder!"
+    };
 
+    msg.author
+        .direct_message(&ctx, |m| m.content(message))
+        .await?;
     Ok(())
 }
