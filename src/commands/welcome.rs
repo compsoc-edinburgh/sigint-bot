@@ -1,7 +1,10 @@
 use crate::ConfigContainer;
-use serenity::framework::standard::{macros::command, Args, CommandResult};
-use serenity::model::prelude::*;
-use serenity::prelude::*;
+use serenity::{
+    framework::standard::{macros::command, Args, CommandResult},
+    model::prelude::*,
+    prelude::*,
+};
+use tracing::{error, info};
 
 #[command]
 pub async fn welcome(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
@@ -25,12 +28,24 @@ pub async fn welcome(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
         match sigint_guild.member(&ctx.http, msg.author.id).await {
             Ok(mut member) => {
                 member.add_role(&ctx.http, welcome_role).await?;
+                info!(
+                    "awarded \"Curious Hacker\" role to {}#{}.",
+                    msg.author.name, msg.author.discriminator
+                );
+
                 "Congratulations! You have earned the \"Curious Hacker\" role!"
             }
             Err(SerenityError::Http(_)) => {
+                info!(
+                    "non-member {}#{} attempted `welcome` command.",
+                    msg.author.name, msg.author.discriminator
+                );
                 "Please join the SIGINT server first! https://discord.gg/WynY7FD3HP"
             }
-            _ => "An error has occurred, please contact SIGINT admin",
+            err => {
+                error!("welcome command member retrieval failed {:?}!", err);
+                "An error has occurred, please contact SIGINT admin"
+            }
         }
     } else {
         "I don't think that is the right flag... Try harder!"

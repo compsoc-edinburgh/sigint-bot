@@ -1,4 +1,4 @@
-FROM rust:1.43 as builder
+FROM rust:1.54 as builder
 
 RUN USER=root cargo new --bin sigint-bot
 WORKDIR ./sigint-bot
@@ -22,7 +22,8 @@ RUN apt-get update \
 EXPOSE 8000
 
 ENV TZ=Etc/UTC \
-    APP_USER=appuser
+    APP_USER=appuser \
+    RUST_LOG=info
 
 RUN groupadd $APP_USER \
     && useradd -g $APP_USER $APP_USER \
