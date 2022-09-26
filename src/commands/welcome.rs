@@ -1,6 +1,8 @@
 use crate::{ConfigContainer, Context};
-use poise::serenity_prelude::{GuildId, RoleId, SerenityError};
-use poise::{self, command};
+use poise::{
+    self, command,
+    serenity_prelude::{GuildId, RoleId, SerenityError},
+};
 use tracing::{error, info};
 
 use poise::serenity_prelude as serenity;

@@ -3,29 +3,21 @@
 #![warn(clippy::nursery)]
 #![allow(clippy::no_effect_underscore_binding)]
 
-//! Requires the 'framework' feature flag be enabled in your project's
-//! `Cargo.toml`.
-//!
-//! This can be enabled by specifying the feature in the dependency section:
-//!
-//! ```toml
-//! [dependencies.serenity]
-//! git = "https://github.com/serenity-rs/serenity.git"
-//! features = ["framework", "standard_framework"]
-//! ```
 mod commands;
 
 use chrono::Utc;
-use commands::ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame};
-use commands::{register_commands::register_slash_commands, welcome};
-use poise::{serenity_prelude as serenity, Framework, PrefixFrameworkOptions};
-
+use commands::{
+    ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame},
+    register_commands::register_slash_commands,
+    welcome,
+};
+use poise::{
+    serenity_prelude::{self as serenity, ChannelId, SerenityError},
+    Framework, PrefixFrameworkOptions,
+};
+use serde::Deserialize;
 use serenity::{Mutex, TypeMapKey};
 use std::{collections::HashSet, fs::read_to_string, sync::Arc};
-
-use poise::serenity_prelude::{ChannelId, SerenityError};
-use serde::Deserialize;
-
 use tracing::info;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
