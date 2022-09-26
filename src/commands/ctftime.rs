@@ -1,0 +1,195 @@
+use std::{
+    convert::Into,
+    ops::{Add, Sub},
+    time::Duration,
+};
+
+use chrono::{DateTime, Utc};
+use poise::serenity_prelude::{CacheHttp, CreateEmbed, Error, RoleId};
+use serde::Deserialize;
+use tracing::info;
+
+use crate::{CTFLog, ConfigContainer, Context};
+
+#[derive(poise::ChoiceParameter)]
+pub enum TimeFrame {
+    #[name = "Today"]
+    Today,
+    #[name = "Tomorrow"]
+    Tomorrow,
+    #[name = "Coming week"]
+    Week,
+}
+
+impl TimeFrame {
+    pub const fn to_duration(&self) -> Duration {
+        match self {
+            Self::Today => std::time::Duration::from_secs(86_400),
+            Self::Tomorrow => std::time::Duration::from_secs(172_800),
+            Self::Week => std::time::Duration::from_secs(604_800),
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Deserialize, Debug)]
+struct Organizers {
+    id: usize,
+    name: String,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+struct CtfDuration {
+    hours: usize,
+    days: usize,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug, Clone)]
+pub struct Ctf {
+    organizers: Vec<Organizers>,
+    onsite: bool,
+    finish: DateTime<Utc>,
+    description: String,
+    weight: f32,
+    title: String,
+    url: String,
+    is_votable_now: bool,
+    restrictions: String,
+    format: String,
+    start: DateTime<Utc>,
+    participants: usize,
+    ctftime_url: String,
+    location: String,
+    live_feed: String,
+    public_votable: bool,
+    duration: CtfDuration,
+    logo: String,
+    format_id: usize,
+    id: usize,
+    ctf_id: usize,
+}
+impl Ctf {
+    pub async fn get_ctfs(duration: Duration) -> Result<Vec<Self>, Error> {
+        let url = format!(
+            "https://ctftime.org/api/v1/events/?limit=100&start={}&finish={}",
+            now().as_secs(),
+            now().add(duration).as_secs()
+        );
+        reqwest::get(url).await?.json().await.map_err(Into::into)
+    }
+
+    pub const fn finish(&self) -> DateTime<Utc> {
+        self.finish
+    }
+}
+
+impl From<Ctf> for CTFLog {
+    fn from(ctf: Ctf) -> Self {
+        Self {
+            ctf_id: ctf.ctf_id,
+            finish: ctf.finish,
+        }
+    }
+}
+
+#[poise::command(slash_command, help_text_fn = "generate_help_get_ctf")]
+pub async fn get_upcoming_ctf(
+    ctx: Context<'_>,
+    #[description = "Requested time frame"] timeframe: TimeFrame,
+) -> Result<(), Error> {
+    let ctfs = Ctf::get_ctfs(timeframe.to_duration()).await?;
+    info!("logged {:?}", &ctfs);
+    if ctfs.is_empty() {
+        ctx.say("No Upcoming CTFs in that time period").await?;
+        return Ok(());
+    }
+
+    for ctf in &ctfs {
+        ctx.send(|builder| {
+            builder.embed(|eb| generate_embed(ctf, eb))
+            // // Uncomment to add buttons
+            // .components(|b| {
+            //     b.create_action_row(|b| {
+            //         b.create_button(|b| {
+            //             b.label("Visit ctftime");
+            //             b
+            //         })
+            //     })
+            // })
+        })
+        .await?;
+    }
+    Ok(())
+}
+
+fn generate_help_get_ctf() -> String {
+    "Get all upcoming ctfs for the requested time frame".to_string()
+}
+
+fn now() -> Duration {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+}
+
+pub fn generate_embed<'a>(ctf: &Ctf, eb: &'a mut CreateEmbed) -> &'a mut CreateEmbed {
+    eb.title(&ctf.title)
+        .description(&ctf.description)
+        .thumbnail(&ctf.logo)
+        .field(
+            "Dates",
+            format!(
+                "Starts: <t:{}:f>.\n Ends: <t:{}:f>",
+                ctf.finish
+                    .sub(chrono::Duration::hours(ctf.duration.hours as i64))
+                    .sub(chrono::Duration::days(ctf.duration.days as i64))
+                    .timestamp(),
+                ctf.finish.timestamp()
+            ),
+            true,
+        )
+        .field("CTF Page", &ctf.url, true)
+        .url(&ctf.ctftime_url)
+        .fields([
+            ("Weight", &ctf.weight.to_string(), true),
+            ("Participants", &ctf.participants.to_string(), true),
+            ("Format", &ctf.format.to_string(), true),
+        ])
+}
+
+#[poise::command(
+    slash_command,
+    help_text_fn = "generate_help_assign_ctf_announcement_role"
+)]
+pub async fn assign_ctf_announcement_role(ctx: Context<'_>) -> Result<(), Error> {
+    let guild = ctx.guild().unwrap();
+    let author = ctx.author();
+    let data = ctx.discord().data.read().await;
+    let config = data.get::<ConfigContainer>().unwrap();
+    let role = RoleId(config.notification_role_id);
+    let cache = ctx.discord().http();
+    let mut member = guild.member(cache, author.id).await?;
+
+    if author
+        .has_role(ctx.discord().http(), guild.id, role)
+        .await?
+    {
+        info!("{} just removed the announcement role", member.user.name);
+        member.remove_role(cache, role).await?;
+    } else {
+        info!(
+            "{} just gave themselves the announcement role",
+            member.user.name
+        );
+        member.add_role(cache, role).await?;
+    }
+
+    ctx.say("Success").await?;
+
+    Ok(())
+}
+
+fn generate_help_assign_ctf_announcement_role() -> String {
+    "Get the ctf announcement role to get pinged for all upcoming ctftime ctfs".to_string()
+}

@@ -1,33 +1,39 @@
-use crate::ConfigContainer;
-use serenity::{
-    framework::standard::{macros::command, Args, CommandResult},
-    model::prelude::*,
-    prelude::*,
+use crate::{ConfigContainer, Context};
+use poise::{
+    self, command,
+    serenity_prelude::{GuildId, RoleId, SerenityError},
 };
 use tracing::{error, info};
 
-#[command]
-pub async fn welcome(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let flag = args.single::<String>()?;
+use poise::serenity_prelude as serenity;
 
-    let data = ctx.data.write().await;
+#[command(prefix_command)]
+pub async fn welcome(
+    ctx: Context<'_>,
+    msg: serenity::Message,
+    #[description = "flag"] flag: String,
+) -> std::result::Result<(), SerenityError> {
+    let data = ctx.discord().data.write().await;
     let config = data
         .get::<ConfigContainer>()
         .expect("Could not get config from context");
     let sigint_guild = GuildId(config.guild_id);
     let welcome_role = RoleId(config.welcome.role_id);
 
-    let message = if msg
-        .author
-        .has_role(&ctx.http, sigint_guild, welcome_role)
+    let message = if ctx
+        .author()
+        .has_role(&ctx.discord().http, sigint_guild, welcome_role)
         .await?
     {
         "You already have the \"Curious Hacker\" role."
     } else if flag == config.welcome.flag {
         // Add role to the person DM
-        match sigint_guild.member(&ctx.http, msg.author.id).await {
+        match sigint_guild
+            .member(&ctx.discord().http, msg.author.id)
+            .await
+        {
             Ok(mut member) => {
-                member.add_role(&ctx.http, welcome_role).await?;
+                member.add_role(&ctx.discord().http, welcome_role).await?;
                 info!(
                     "awarded \"Curious Hacker\" role to {}#{}.",
                     msg.author.name, msg.author.discriminator
@@ -51,8 +57,10 @@ pub async fn welcome(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
         "I don't think that is the right flag... Try harder!"
     };
 
-    msg.author
-        .direct_message(&ctx, |m| m.content(message))
-        .await?;
+    ctx.say(message).await?;
+
+    // msg.author
+    //     .direct_message(&ctx.data(), |m| m.content(message))
+    //     .await?;
     Ok(())
 }
