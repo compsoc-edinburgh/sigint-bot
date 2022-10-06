@@ -18,7 +18,7 @@ use poise::{
 use serde::Deserialize;
 use serenity::{Mutex, TypeMapKey};
 use std::{collections::HashSet, fs::read_to_string, sync::Arc};
-use tracing::info;
+use tracing::{error, info, log::warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use crate::commands::ctftime::assign_ctf_announcement_role;
@@ -175,7 +175,13 @@ fn post_ctf_loop(
             interval.tick().await;
 
             // Load all ctfs
-            let ctfs = Ctf::get_ctfs(TimeFrame::Week.to_duration()).await.unwrap();
+            let ctfs = match Ctf::get_ctfs(TimeFrame::Week.to_duration()).await {
+                Ok(x) => x,
+                Err(err) => {
+                    error!("Failed to get ctfs: {:?}", err);
+                    break;
+                }
+            };
 
             // Remove all old saved ctfs that are now finished.
             let mut user_data_locked = user_data.lock().await;
