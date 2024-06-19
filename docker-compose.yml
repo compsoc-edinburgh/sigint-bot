@@ -1,0 +1,5 @@
+services:
+  sigint-bot:
+    build:
+      context: ./
+      dockerfile: Dockerfile

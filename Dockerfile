@@ -1,4 +1,4 @@
-FROM rust:1.64 as builder
+FROM rust:1.79 as builder
 
 RUN USER=root cargo new --bin sigint-bot
 WORKDIR ./sigint-bot
@@ -12,7 +12,7 @@ RUN rm ./target/release/deps/sigint_bot*
 RUN cargo build --release
 
 
-FROM debian:buster-slim
+FROM debian:12.5-slim
 ARG APP=/usr/src/app
 
 RUN apt-get update \
