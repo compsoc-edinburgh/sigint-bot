@@ -10,6 +10,7 @@ use commands::{
     ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame},
     register_commands::register_slash_commands,
     welcome,
+    ctfnote::ctfnote_link,
 };
 use poise::{
     serenity_prelude::{self as serenity, ChannelId, SerenityError},
@@ -70,6 +71,8 @@ pub(crate) struct Config {
     notification_channel_id: u64,
     notification_role_id: u64,
     ctftime_loop_seconds: u64,
+    ctfnote_admin_api_endpoint: String,
+    ctfnote_admin_api_password: String,
 }
 
 #[derive(Deserialize, Clone)]
@@ -104,6 +107,7 @@ async fn main() {
                 register_slash_commands(),
                 get_upcoming_ctf(),
                 assign_ctf_announcement_role(),
+                ctfnote_link(),
             ],
             prefix_options: PrefixFrameworkOptions {
                 prefix: Some("!".to_string()),
