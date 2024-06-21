@@ -1,7 +1,7 @@
 use crate::{ConfigContainer, Context};
 use poise::{
-    self, command,
-    serenity_prelude::{GuildId, RoleId, SerenityError},
+    command,
+    serenity_prelude::{GuildId, RoleId, Error},
 };
 use tracing::{error, info};
 
@@ -12,13 +12,13 @@ pub async fn welcome(
     ctx: Context<'_>,
     msg: serenity::Message,
     #[description = "flag"] flag: String,
-) -> std::result::Result<(), SerenityError> {
+) -> std::result::Result<(), Error> {
     let data = ctx.discord().data.write().await;
     let config = data
         .get::<ConfigContainer>()
         .expect("Could not get config from context");
-    let sigint_guild = GuildId(config.guild_id);
-    let welcome_role = RoleId(config.welcome.role_id);
+    let sigint_guild = GuildId::new(config.guild_id);
+    let welcome_role = RoleId::new(config.welcome.role_id);
 
     let message = if ctx
         .author()
@@ -35,15 +35,15 @@ pub async fn welcome(
             Ok(mut member) => {
                 member.add_role(&ctx.discord().http, welcome_role).await?;
                 info!(
-                    "awarded \"Curious Hacker\" role to {}#{}.",
+                    "awarded \"Curious Hacker\" role to {}#{:?}.",
                     msg.author.name, msg.author.discriminator
                 );
 
                 "Congratulations! You have earned the \"Curious Hacker\" role!"
             }
-            Err(SerenityError::Http(_)) => {
+            Err(Error::Http(_)) => {
                 info!(
-                    "non-member {}#{} attempted `welcome` command.",
+                    "non-member {}#{:?} attempted `welcome` command.",
                     msg.author.name, msg.author.discriminator
                 );
                 "Please join the SIGINT server first! https://discord.gg/WynY7FD3HP"

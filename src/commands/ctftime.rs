@@ -5,7 +5,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use poise::serenity_prelude::{CacheHttp, CreateEmbed, Error, RoleId};
+use poise::{serenity_prelude::{CacheHttp, CreateEmbed, Error, RoleId}, CreateReply};
 use serde::Deserialize;
 use tracing::info;
 
@@ -106,19 +106,7 @@ pub async fn get_upcoming_ctf(
     }
 
     for ctf in &ctfs {
-        ctx.send(|builder| {
-            builder.embed(|eb| generate_embed(ctf, eb))
-            // // Uncomment to add buttons
-            // .components(|b| {
-            //     b.create_action_row(|b| {
-            //         b.create_button(|b| {
-            //             b.label("Visit ctftime");
-            //             b
-            //         })
-            //     })
-            // })
-        })
-        .await?;
+        ctx.send(CreateReply::default().embed(generate_embed(ctf))).await?;
     }
     Ok(())
 }
@@ -133,8 +121,8 @@ fn now() -> Duration {
         .unwrap()
 }
 
-pub fn generate_embed<'a>(ctf: &Ctf, eb: &'a mut CreateEmbed) -> &'a mut CreateEmbed {
-    eb.title(&ctf.title)
+pub fn generate_embed<'a>(ctf: &Ctf) -> CreateEmbed {
+    CreateEmbed::new().title(&ctf.title)
         .description(&ctf.description)
         .thumbnail(&ctf.logo)
         .field(
@@ -158,37 +146,37 @@ pub fn generate_embed<'a>(ctf: &Ctf, eb: &'a mut CreateEmbed) -> &'a mut CreateE
         ])
 }
 
-#[poise::command(
-    slash_command,
-    help_text_fn = "generate_help_assign_ctf_announcement_role"
-)]
-pub async fn assign_ctf_announcement_role(ctx: Context<'_>) -> Result<(), Error> {
-    let guild = ctx.guild().unwrap();
-    let author = ctx.author();
-    let data = ctx.discord().data.read().await;
-    let config = data.get::<ConfigContainer>().unwrap();
-    let role = RoleId(config.notification_role_id);
-    let cache = ctx.discord().http();
-    let mut member = guild.member(cache, author.id).await?;
+// #[poise::command(
+//     slash_command,
+//     help_text_fn = "generate_help_assign_ctf_announcement_role"
+// )]
+// pub async fn assign_ctf_announcement_role(ctx: Context<'_>) -> Result<(), Error> {
+//     let guild = ctx.guild().unwrap();
+//     let author = ctx.author();
+//     let data = ctx.discord().data.read().await;
+//     let config = data.get::<ConfigContainer>().unwrap();
+//     let role = RoleId::new(config.notification_role_id);
+//     let cache = ctx.discord().http();
+//     let mut member = guild.member(cache, author.id).await?;
 
-    if author
-        .has_role(ctx.discord().http(), guild.id, role)
-        .await?
-    {
-        info!("{} just removed the announcement role", member.user.name);
-        member.remove_role(cache, role).await?;
-    } else {
-        info!(
-            "{} just gave themselves the announcement role",
-            member.user.name
-        );
-        member.add_role(cache, role).await?;
-    }
+//     if author
+//         .has_role(ctx.discord().http(), guild.id, role)
+//         .await?
+//     {
+//         info!("{} just removed the announcement role", member.user.name);
+//         member.remove_role(cache, role).await?;
+//     } else {
+//         info!(
+//             "{} just gave themselves the announcement role",
+//             member.user.name
+//         );
+//         member.add_role(cache, role).await?;
+//     }
 
-    ctx.say("Success").await?;
+//     ctx.say("Success").await?;
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 fn generate_help_assign_ctf_announcement_role() -> String {
     "Get the ctf announcement role to get pinged for all upcoming ctftime ctfs".to_string()

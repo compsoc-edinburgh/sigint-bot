@@ -7,25 +7,28 @@ mod commands;
 
 use chrono::Utc;
 use commands::{
+    // ctfnote::ctfnote_link,
     ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame},
-    register_commands::register_slash_commands,
-    welcome,
-    ctfnote::ctfnote_link,
+    // register_commands::register_slash_commands,
+    // welcome,
 };
 use poise::{
-    serenity_prelude::{self as serenity, ChannelId, SerenityError},
+    serenity_prelude::{
+        self as serenity, futures::lock::Mutex, prelude::TypeMapKey, ChannelId, ClientBuilder,
+        CreateAllowedMentions, Error,
+    },
     Framework, PrefixFrameworkOptions,
 };
 use serde::Deserialize;
-use serenity::{Mutex, TypeMapKey};
+use serenity::builder::CreateMessage;
 use std::{collections::HashSet, fs::read_to_string, sync::Arc};
 use tracing::{error, info, log::warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-use crate::commands::ctftime::assign_ctf_announcement_role;
-use crate::welcome::welcome;
+// use crate::commands::ctftime::assign_ctf_announcement_role;
+// use crate::welcome::welcome;
 
-type Context<'a> = poise::Context<'a, Arc<Mutex<Data>>, SerenityError>;
+type Context<'a> = poise::Context<'a, Data, Error>;
 
 pub(crate) struct ShardManagerContainer;
 pub(crate) struct ConfigContainer;
@@ -44,11 +47,11 @@ pub struct CTFLog {
     pub finish: chrono::DateTime<Utc>,
 }
 
-pub struct Data {
+pub struct PostCtfLoopData {
     pub previously_shown: HashSet<CTFLog>,
 }
 
-impl Data {
+impl PostCtfLoopData {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -57,7 +60,7 @@ impl Data {
     }
 }
 
-impl Default for Data {
+impl Default for PostCtfLoopData {
     fn default() -> Self {
         Self::new()
     }
@@ -81,13 +84,15 @@ pub(crate) struct WelcomeConfig {
     role_id: u64,
 }
 
+// Custom user data passed to all command functions
+pub struct Data {}
+
 #[tokio::main]
 async fn main() {
     // Load configurations.
-    let config: Arc<Config> = Arc::new(
+    let config: Config =
         toml::from_str(&read_to_string("config.toml").expect("Error accessing config.toml"))
-            .expect("Error parsing config.toml"),
-    );
+            .expect("Error parsing config.toml");
 
     // Initialize the logger to use environment variables.
     let subscriber = FmtSubscriber::builder()
@@ -99,15 +104,15 @@ async fn main() {
     let config_clone = config.clone();
 
     // Create the framework
-    let client = Framework::builder()
+    let framework = Framework::builder()
         .options(poise::FrameworkOptions {
             // TODO: Add allowed mentions
             commands: vec![
-                welcome(),
-                register_slash_commands(),
+                // welcome(),
+                // register_slash_commands(),
                 get_upcoming_ctf(),
-                assign_ctf_announcement_role(),
-                ctfnote_link(),
+                // assign_ctf_announcement_role(),
+                // ctfnote_link(),
             ],
             prefix_options: PrefixFrameworkOptions {
                 prefix: Some("!".to_string()),
@@ -119,55 +124,50 @@ async fn main() {
             },
             ..Default::default()
         })
-        .token(&config.discord_token)
-        .intents(
-            serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT,
-        )
-        .user_data_setup(move |ctx, _ready, _framework| {
+        .setup(move |ctx, _ready, _framework| {
             Box::pin(async move {
-                let user_data = Arc::new(Mutex::new(Data::new()));
-                let user_data_clone = user_data.clone();
-
-                post_ctf_loop(user_data_clone, config_clone, ctx.clone());
-                Ok(user_data)
+                post_ctf_loop(config_clone, ctx.clone());
+                Ok(Data {})
             })
         })
-        .build()
-        .await
-        .expect("Error creating client");
+        .build();
 
-    {
-        let client_data = client.client();
-        let mut data = client_data.data.write().await;
-        data.insert::<ShardManagerContainer>(client.shard_manager().clone());
-        data.insert::<ConfigContainer>(config.clone());
-    }
+    let token = &config.discord_token;
+    let intents =
+        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
+    let client = ClientBuilder::new(token, intents)
+        .framework(framework)
+        .await;
 
-    info!("Client Created");
+    // {
+    //     let client_data = client.client();
+    //     let mut data = client_data.data.write().await;
+    //     data.insert::<ShardManagerContainer>(client.shard_manager().clone());
+    //     data.insert::<ConfigContainer>(config.clone());
+    // }
 
-    let shard_manager = client.shard_manager().clone();
+    // info!("Client Created");
 
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Could not register ctrl+c handler");
-        shard_manager.lock().await.shutdown_all().await;
-    });
+    // let shard_manager = client.shard_manager().clone();
+
+    // tokio::spawn(async move {
+    //     tokio::signal::ctrl_c()
+    //         .await
+    //         .expect("Could not register ctrl+c handler");
+    //     shard_manager.lock().await.shutdown_all().await;
+    // });
 
     info!("Shard manager created");
 
-    if let Err(e) = client.start().await {
+    if let Err(e) = client.unwrap().start().await {
         tracing::error!("Client error: {:?}", e);
     }
 }
 
-fn post_ctf_loop(
-    user_data: Arc<Mutex<Data>>,
-    config: Arc<Config>,
-    ctx: poise::serenity_prelude::Context,
-) {
+fn post_ctf_loop(config: Config, ctx: poise::serenity_prelude::Context) {
     // Loop to update us with upcoming ctfs. Also keeps a log of all previously displayed CTFS to make sure we don't display them multiple times.
     // Clear all ctfs in the past to stop memory leaks. This state is used to make sure we don't show multiple ctfs
+    let user_data = Arc::new(Mutex::new(PostCtfLoopData::new()));
     tokio::spawn(async move {
         info!("Creating Interval");
         let mut interval =
@@ -213,19 +213,22 @@ fn post_ctf_loop(
 
             if !unseen.is_empty() {
                 // Post each new ctf into the channel
-                let channel = ChannelId(config.notification_channel_id)
+                let channel = ChannelId::new(config.notification_channel_id)
                     .to_channel(ctx.http.clone())
                     .await
                     .unwrap();
 
                 channel
                     .id()
-                    .send_message(ctx.http.clone(), |b| {
-                        b.allowed_mentions(|am| {
-                            am.empty_parse().roles(vec![config.notification_role_id])
-                        })
-                        .content(format!("<@&{}>", config.notification_role_id))
-                    })
+                    .send_message(
+                        ctx.http.clone(),
+                        CreateMessage::new()
+                            .allowed_mentions(
+                                CreateAllowedMentions::new()
+                                    .roles(vec![config.notification_role_id]),
+                            )
+                            .content(format!("<@&{}>", config.notification_role_id)),
+                    )
                     .await
                     .unwrap();
 
@@ -235,9 +238,10 @@ fn post_ctf_loop(
                 for ctf in unseen {
                     channel
                         .id()
-                        .send_message(ctx.http.clone(), |b| {
-                            b.add_embed(|eb| generate_embed(ctf, eb))
-                        })
+                        .send_message(
+                            ctx.http.clone(),
+                            CreateMessage::new().add_embed(generate_embed(ctf)),
+                        )
                         .await
                         .unwrap();
                 }
