@@ -5,11 +5,11 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use poise::{serenity_prelude::{CacheHttp, CreateEmbed, Error, RoleId}, CreateReply};
+use poise::{serenity_prelude::{CreateEmbed, Error, GuildId, RoleId}, CreateReply};
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{CTFLog, ConfigContainer, Context};
+use crate::{CTFLog, Context};
 
 #[derive(poise::ChoiceParameter)]
 pub enum TimeFrame {
@@ -146,37 +146,30 @@ pub fn generate_embed<'a>(ctf: &Ctf) -> CreateEmbed {
         ])
 }
 
-// #[poise::command(
-//     slash_command,
-//     help_text_fn = "generate_help_assign_ctf_announcement_role"
-// )]
-// pub async fn assign_ctf_announcement_role(ctx: Context<'_>) -> Result<(), Error> {
-//     let guild = ctx.guild().unwrap();
-//     let author = ctx.author();
-//     let data = ctx.discord().data.read().await;
-//     let config = data.get::<ConfigContainer>().unwrap();
-//     let role = RoleId::new(config.notification_role_id);
-//     let cache = ctx.discord().http();
-//     let mut member = guild.member(cache, author.id).await?;
+#[poise::command(
+    slash_command,
+    help_text_fn = "generate_help_assign_ctf_announcement_role"
+)]
+pub async fn assign_ctf_announcement_role(ctx: Context<'_>) -> Result<(), Error> {
+    let config = &ctx.data().config;
+    let author = ctx.author();
+    let guild = GuildId::new(config.guild_id);
+    let role = RoleId::new(config.notification_role_id);
+    let cache_http = ctx.http();
+    let has_role = author.has_role(cache_http, guild, RoleId::new(config.notification_role_id)).await?;
 
-//     if author
-//         .has_role(ctx.discord().http(), guild.id, role)
-//         .await?
-//     {
-//         info!("{} just removed the announcement role", member.user.name);
-//         member.remove_role(cache, role).await?;
-//     } else {
-//         info!(
-//             "{} just gave themselves the announcement role",
-//             member.user.name
-//         );
-//         member.add_role(cache, role).await?;
-//     }
+    if has_role {
+        info!("{} just removed the announcement role", author.name);
+        guild.member(cache_http, author.id).await.unwrap().remove_role(cache_http, role).await?;
+    } else {
+        info!("{} just gave themselves the announcement role", author.name);
+        guild.member(cache_http, author.id).await.unwrap().add_role(cache_http, role).await?;
+    }
 
-//     ctx.say("Success").await?;
+    ctx.say("Success").await?;
 
-//     Ok(())
-// }
+    Ok(())
+}
 
 fn generate_help_assign_ctf_announcement_role() -> String {
     "Get the ctf announcement role to get pinged for all upcoming ctftime ctfs".to_string()

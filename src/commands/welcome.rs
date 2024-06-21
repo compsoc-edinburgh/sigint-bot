@@ -1,50 +1,45 @@
-use crate::{ConfigContainer, Context};
+use crate::Context;
 use poise::{
     command,
     serenity_prelude::{GuildId, RoleId, Error},
 };
 use tracing::{error, info};
 
-use poise::serenity_prelude as serenity;
 
-#[command(prefix_command)]
+#[command(prefix_command, dm_only)]
 pub async fn welcome(
     ctx: Context<'_>,
-    msg: serenity::Message,
     #[description = "flag"] flag: String,
 ) -> std::result::Result<(), Error> {
-    let data = ctx.discord().data.write().await;
-    let config = data
-        .get::<ConfigContainer>()
-        .expect("Could not get config from context");
+    let config = &ctx.data().config;
     let sigint_guild = GuildId::new(config.guild_id);
     let welcome_role = RoleId::new(config.welcome.role_id);
 
     let message = if ctx
         .author()
-        .has_role(&ctx.discord().http, sigint_guild, welcome_role)
+        .has_role(&ctx.http(), sigint_guild, welcome_role)
         .await?
     {
         "You already have the \"Curious Hacker\" role."
     } else if flag == config.welcome.flag {
         // Add role to the person DM
         match sigint_guild
-            .member(&ctx.discord().http, msg.author.id)
+            .member(&ctx.http(), ctx.author().id)
             .await
         {
-            Ok(mut member) => {
-                member.add_role(&ctx.discord().http, welcome_role).await?;
+            Ok(member) => {
+                member.add_role(&ctx.http(), welcome_role).await?;
                 info!(
-                    "awarded \"Curious Hacker\" role to {}#{:?}.",
-                    msg.author.name, msg.author.discriminator
+                    "awarded \"Curious Hacker\" role to {}.",
+                    ctx.author().name
                 );
 
                 "Congratulations! You have earned the \"Curious Hacker\" role!"
             }
             Err(Error::Http(_)) => {
                 info!(
-                    "non-member {}#{:?} attempted `welcome` command.",
-                    msg.author.name, msg.author.discriminator
+                    "non-member {} attempted `welcome` command.",
+                    ctx.author().name
                 );
                 "Please join the SIGINT server first! https://discord.gg/WynY7FD3HP"
             }
@@ -58,9 +53,5 @@ pub async fn welcome(
     };
 
     ctx.say(message).await?;
-
-    // msg.author
-    //     .direct_message(&ctx.data(), |m| m.content(message))
-    //     .await?;
     Ok(())
 }

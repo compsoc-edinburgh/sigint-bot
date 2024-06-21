@@ -7,14 +7,14 @@ mod commands;
 
 use chrono::Utc;
 use commands::{
-    // ctfnote::ctfnote_link,
+    ctfnote::ctfnote_link,
     ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame},
-    // register_commands::register_slash_commands,
-    // welcome,
+    register_commands::register_slash_commands,
+    welcome,
 };
 use poise::{
     serenity_prelude::{
-        self as serenity, futures::lock::Mutex, prelude::TypeMapKey, ChannelId, ClientBuilder,
+        self as serenity, futures::lock::Mutex, ChannelId, ClientBuilder,
         CreateAllowedMentions, Error,
     },
     Framework, PrefixFrameworkOptions,
@@ -25,21 +25,10 @@ use std::{collections::HashSet, fs::read_to_string, sync::Arc};
 use tracing::{error, info, log::warn};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-// use crate::commands::ctftime::assign_ctf_announcement_role;
-// use crate::welcome::welcome;
+use crate::commands::ctftime::assign_ctf_announcement_role;
+use crate::welcome::welcome;
 
 type Context<'a> = poise::Context<'a, Data, Error>;
-
-pub(crate) struct ShardManagerContainer;
-pub(crate) struct ConfigContainer;
-
-impl TypeMapKey for ShardManagerContainer {
-    type Value = Arc<Mutex<serenity::ShardManager>>;
-}
-
-impl TypeMapKey for ConfigContainer {
-    type Value = Arc<Config>;
-}
 
 #[derive(Eq, Hash, PartialEq)]
 pub struct CTFLog {
@@ -85,7 +74,9 @@ pub(crate) struct WelcomeConfig {
 }
 
 // Custom user data passed to all command functions
-pub struct Data {}
+pub struct Data {
+    config: Config,
+}
 
 #[tokio::main]
 async fn main() {
@@ -102,17 +93,18 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
     let config_clone = config.clone();
+    let config_clone_2 = config.clone();
 
     // Create the framework
     let framework = Framework::builder()
         .options(poise::FrameworkOptions {
             // TODO: Add allowed mentions
             commands: vec![
-                // welcome(),
-                // register_slash_commands(),
+                welcome(),
+                register_slash_commands(),
                 get_upcoming_ctf(),
-                // assign_ctf_announcement_role(),
-                // ctfnote_link(),
+                assign_ctf_announcement_role(),
+                ctfnote_link(),
             ],
             prefix_options: PrefixFrameworkOptions {
                 prefix: Some("!".to_string()),
@@ -127,7 +119,9 @@ async fn main() {
         .setup(move |ctx, _ready, _framework| {
             Box::pin(async move {
                 post_ctf_loop(config_clone, ctx.clone());
-                Ok(Data {})
+                Ok(Data {
+                    config: config_clone_2,
+                })
             })
         })
         .build();
@@ -138,26 +132,6 @@ async fn main() {
     let client = ClientBuilder::new(token, intents)
         .framework(framework)
         .await;
-
-    // {
-    //     let client_data = client.client();
-    //     let mut data = client_data.data.write().await;
-    //     data.insert::<ShardManagerContainer>(client.shard_manager().clone());
-    //     data.insert::<ConfigContainer>(config.clone());
-    // }
-
-    // info!("Client Created");
-
-    // let shard_manager = client.shard_manager().clone();
-
-    // tokio::spawn(async move {
-    //     tokio::signal::ctrl_c()
-    //         .await
-    //         .expect("Could not register ctrl+c handler");
-    //     shard_manager.lock().await.shutdown_all().await;
-    // });
-
-    info!("Shard manager created");
 
     if let Err(e) = client.unwrap().start().await {
         tracing::error!("Client error: {:?}", e);

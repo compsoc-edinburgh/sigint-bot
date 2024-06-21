@@ -1,7 +1,7 @@
-use poise::serenity_prelude::Error;
+use poise::{serenity_prelude::Error, CreateReply};
 use serde::{Deserialize, Serialize};
 
-use crate::{ConfigContainer, Context};
+use crate::Context;
 
 #[derive(Serialize)]
 struct CtfnoteLinkRequest {
@@ -20,10 +20,7 @@ pub async fn ctfnote_link(
     ctx: Context<'_>,
     #[description = "Your CTFNote account token (found in your profile)"] token: String,
 ) -> Result<(), Error> {
-    let data = ctx.discord().data.write().await;
-    let config = data
-        .get::<ConfigContainer>()
-        .expect("Could not get config from context");
+    let config = &ctx.data().config;
     let ctfnote_admin_api_endpoint = &config.ctfnote_admin_api_endpoint;
     let ctfnote_admin_api_password = &config.ctfnote_admin_api_password;
 
@@ -39,7 +36,6 @@ pub async fn ctfnote_link(
         .await?;
     let message = res.json::<CtfnoteLinkResponse>().await?;
 
-    ctx.defer_ephemeral().await?;
-    ctx.say(format!("{}", message.message)).await?;
+    ctx.send(CreateReply::default().ephemeral(true).content(format!("{}", message.message))).await?;
     Ok(())
 }
