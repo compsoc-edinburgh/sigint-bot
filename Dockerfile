@@ -1,4 +1,4 @@
-FROM rust:1.79 as builder
+FROM rust:1.78 as builder
 
 RUN USER=root cargo new --bin sigint-bot
 WORKDIR ./sigint-bot
