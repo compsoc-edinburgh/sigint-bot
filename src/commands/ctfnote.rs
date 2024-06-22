@@ -114,3 +114,52 @@ pub async fn ctfnote_login(ctx: Context<'_>) -> Result<(), Error> {
 
     Ok(())
 }
+
+#[derive(Serialize)]
+struct CtfnoteRegisterRequest {
+    username: String,
+    discord_id: String,
+}
+
+#[derive(Deserialize)] 
+struct CtfnoteRegisterResponse {
+    message: String,
+}
+
+/// Create CTFNote account
+#[poise::command(slash_command, guild_only)]
+pub async fn ctfnote_create_account(
+    ctx: Context<'_>,
+    #[description = "Username"] username: Option<String>
+) -> Result<(), Error> {
+    let config = &ctx.data().config;
+
+    // only runs in team channel
+    let team_channel_id = config.team_channel_id;
+    let channel_id = ctx.channel_id().get();
+    if channel_id != team_channel_id {
+        ctx.reply(format!("You can only run this command in team channel <#{}>", team_channel_id)).await?;
+        return Ok(());
+    }
+
+    let client = reqwest::Client::new();
+    let author = ctx.author();
+    let username = match username {
+        Some(username) => username,
+        None => author.name.clone(),
+    };
+    let discord_id = author.id;
+    let res = client
+        .post(format!("{}/api/admin/register", &config.ctfnote.ctfnote_extra_url))
+        .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
+        .json(&CtfnoteRegisterRequest {
+            username,
+            discord_id: discord_id.to_string(),
+        })
+        .send()
+        .await?;
+    let response = res.json::<CtfnoteRegisterResponse>().await?;
+    ctx.reply(format!("{}", response.message)).await?;
+
+    Ok(())
+}

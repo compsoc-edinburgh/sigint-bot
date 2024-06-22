@@ -7,7 +7,7 @@ mod commands;
 
 use chrono::Utc;
 use commands::{
-    ctfnote::{ctfnote_link, ctfnote_login},
+    ctfnote::{ctfnote_create_account, ctfnote_link, ctfnote_login},
     ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame},
     register_commands::register_slash_commands,
     welcome,
@@ -62,6 +62,7 @@ pub(crate) struct Config {
     notification_role_id: u64,
     ctftime_loop_seconds: u64,
     ctfnote: CtfnoteConfig,
+    team_channel_id: u64,
 }
 
 #[derive(Deserialize, Clone)]
@@ -110,6 +111,7 @@ async fn main() {
                 assign_ctf_announcement_role(),
                 ctfnote_link(),
                 ctfnote_login(),
+                ctfnote_create_account(),
             ],
             prefix_options: PrefixFrameworkOptions {
                 prefix: Some("!".to_string()),
