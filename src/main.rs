@@ -7,17 +7,15 @@ mod commands;
 
 use chrono::Utc;
 use commands::{
-    ctfnote::ctfnote_link,
+    ctfnote::{ctfnote_link, ctfnote_login},
     ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame},
     register_commands::register_slash_commands,
     welcome,
 };
 use poise::{
     serenity_prelude::{
-        self as serenity, futures::lock::Mutex, ChannelId, ClientBuilder,
-        CreateAllowedMentions, Error,
-    },
-    Framework, PrefixFrameworkOptions,
+        self as serenity, futures::lock::Mutex, CacheHttp, ChannelId, ClientBuilder, CreateAllowedMentions, Error, GuildId
+    }, Framework, PrefixFrameworkOptions
 };
 use serde::Deserialize;
 use serenity::builder::CreateMessage;
@@ -63,14 +61,19 @@ pub(crate) struct Config {
     notification_channel_id: u64,
     notification_role_id: u64,
     ctftime_loop_seconds: u64,
-    ctfnote_admin_api_endpoint: String,
-    ctfnote_admin_api_password: String,
+    ctfnote: CtfnoteConfig,
 }
 
 #[derive(Deserialize, Clone)]
 pub(crate) struct WelcomeConfig {
     flag: String,
     role_id: u64,
+}
+
+#[derive(Deserialize, Clone)]
+pub(crate) struct CtfnoteConfig {
+    ctfnote_extra_url: String,
+    ctfnote_admin_api_password: String,
 }
 
 // Custom user data passed to all command functions
@@ -94,6 +97,7 @@ async fn main() {
 
     let config_clone = config.clone();
     let config_clone_2 = config.clone();
+    let guild_id = config.guild_id;
 
     // Create the framework
     let framework = Framework::builder()
@@ -105,6 +109,7 @@ async fn main() {
                 get_upcoming_ctf(),
                 assign_ctf_announcement_role(),
                 ctfnote_link(),
+                ctfnote_login(),
             ],
             prefix_options: PrefixFrameworkOptions {
                 prefix: Some("!".to_string()),
@@ -118,6 +123,7 @@ async fn main() {
         })
         .setup(move |ctx, _ready, _framework| {
             Box::pin(async move {
+                poise::builtins::register_in_guild(ctx.http(), &_framework.options().commands, GuildId::new(guild_id)).await?;
                 post_ctf_loop(config_clone, ctx.clone());
                 Ok(Data {
                     config: config_clone_2,

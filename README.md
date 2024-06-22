@@ -6,13 +6,14 @@ It requires a `config.toml` file with the following environment variables define
 
 ```
 discord_token = <discord token>
-client_id = <client id>
+client_id = <client id, not actually used>
 guild_id = <guild id for your server>
 notification_channel_id = <channel id for ctf time notifications>
 notification_role_id = <role id that is pinged for each query>
 ctftime_loop_seconds = 120 <time in seconds between each poll to ctftime>
 
-ctfnote_admin_api_endpoint = "http://localhost:8080/extra/api/admin"
+[ctfnote]
+ctfnote_extra_url = "http://localhost:8080/extra"
 ctfnote_admin_api_password = "admin_api_password"
 
 [welcome]
