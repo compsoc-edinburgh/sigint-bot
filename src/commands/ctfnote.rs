@@ -47,20 +47,22 @@ pub async fn ctfnote_link(
 }
 
 #[derive(Serialize)]
-struct CtfnoteGenerateJwtRequest {
+struct GetTokenForDiscordUserRequest {
     discord_id: String,
 }
 
 #[derive(Deserialize)]
-struct CtfnoteGenerateJwtResponse {
-    jwt: Option<CtfnoteGenerateJwtResponseJwt>,
+struct GetTokenForDiscordUserResponse {
+    token: Option<Token>,
     message: String,
 }
 
 #[derive(Deserialize)]
-struct CtfnoteGenerateJwtResponseJwt {
+#[allow(dead_code)]
+pub struct Token {
     token: String,
-    claim: JwtClaim,
+    pub user_id: i32,
+    exp: i64,
 }
 
 #[derive(Deserialize)]
@@ -84,21 +86,21 @@ pub async fn ctfnote_login(ctx: Context<'_>) -> Result<(), Error> {
     let discord_id = ctx.author().id;
     let client = reqwest::Client::new();
     let res = client
-        .post(format!("{}/api/admin/generate-jwt", ctfnote_extra_url))
+        .post(format!("{}/api/admin/get-token", ctfnote_extra_url))
         .basic_auth("admin", Some(ctfnote_admin_api_password))
-        .json(&CtfnoteGenerateJwtRequest {
+        .json(&GetTokenForDiscordUserRequest {
             discord_id: discord_id.to_string(),
         })
         .send()
         .await?;
-    let response = res.json::<CtfnoteGenerateJwtResponse>().await?;
-    let jwt = response.jwt;
-    match jwt {
-        Some(jwt) => {
+    let response = res.json::<GetTokenForDiscordUserResponse>().await?;
+    let token = response.token;
+    match token {
+        Some(token) => {
             ctx.send(
                 CreateReply::default()
                     .ephemeral(true)
-                    .content(format!("<{}/token-login#token={}>\nExpires <t:{}>", ctfnote_extra_url, jwt.token, jwt.claim.exp)),
+                    .content(format!("<{}/token-login?token={}>\nExpires <t:{}>", ctfnote_extra_url, token.token, token.exp)),
             )
             .await?;
         }
