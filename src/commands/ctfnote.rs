@@ -85,8 +85,9 @@ pub async fn ctfnote_login(ctx: Context<'_>) -> Result<(), Error> {
 
     let discord_id = ctx.author().id;
     let client = reqwest::Client::new();
+    let token_endpoint = format!("{}/api/admin/get-token", ctfnote_extra_url);
     let res = client
-        .post(format!("{}/api/admin/get-token", ctfnote_extra_url))
+        .post(&token_endpoint)
         .basic_auth("admin", Some(ctfnote_admin_api_password))
         .json(&GetTokenForDiscordUserRequest {
             discord_id: discord_id.to_string(),
