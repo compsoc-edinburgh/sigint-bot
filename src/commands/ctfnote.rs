@@ -1,6 +1,10 @@
+use std::vec;
+
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use poise::{
-    serenity_prelude::{CreateEmbed, Error},
+    serenity_prelude::{
+        ComponentInteractionCollector, CreateActionRow, CreateButton, CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, Error
+    },
     CreateReply,
 };
 use serde::{Deserialize, Serialize};
@@ -210,6 +214,17 @@ struct Ctf {
 #[derive(Deserialize)]
 struct GetUpcomingCtfResponse(Vec<Ctf>);
 
+#[derive(Serialize)]
+struct AddDiscordUserToCtfRequest {
+    discord_id: String,
+    ctf_id: i32,
+}
+
+#[derive(Deserialize)]
+struct AddDiscordUserToCtfResponse {
+    message: String,
+}
+
 /// Announce upcoming CTFs on CTFNote in the channel
 #[poise::command(slash_command, guild_only)]
 pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
@@ -256,29 +271,61 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
     }
 
     for ctf in response.0 {
-        ctx.send(
-            CreateReply::default().embed(
-                CreateEmbed::new()
-                    .title(&ctf.title)
-                    .description(&ctf.description)
-                    .thumbnail(&ctf.logo_url)
-                    .field(
-                        "Dates",
-                        format!(
-                            "Starts: <t:{}:f>.\n Ends: <t:{}:f>",
-                            ctf.start_time.timestamp(),
-                            ctf.end_time.timestamp(),
-                        ),
-                        true,
-                    )
-                    .field("CTF Page", &ctf.ctf_url, true)
-                    .url(&ctf.ctftime_url)
-                    .fields([
-                        ("Weight", &ctf.weight.to_string(), true),
-                    ]),
-            ),
+        let custom_id = format!("ctfnote_join_ctf:{}", ctf.id);
+        let reply = ctx.send(
+            CreateReply::default()
+                .embed(
+                    CreateEmbed::new()
+                        .title(&ctf.title)
+                        .description(&ctf.description)
+                        .thumbnail(&ctf.logo_url)
+                        .field(
+                            "Dates",
+                            format!(
+                                "Starts: <t:{}:f>.\n Ends: <t:{}:f>",
+                                ctf.start_time.timestamp(),
+                                ctf.end_time.timestamp(),
+                            ),
+                            true,
+                        )
+                        .field("CTF Page", &ctf.ctf_url, true)
+                        .url(&ctf.ctftime_url)
+                        .fields([("Weight", &ctf.weight.to_string(), true)]),
+                )
+                .components(vec![CreateActionRow::Buttons(vec![CreateButton::new(
+                    custom_id.clone(),
+                )
+                .label("Join on CTFNote")])]),
         )
         .await?;
+
+        let mut custom_id_ = custom_id.clone();
+        while let Some(mci) = ComponentInteractionCollector::new(ctx)
+            .message_id(reply.message().await.unwrap().id)
+            .guild_id(ctx.guild_id().unwrap())
+            .channel_id(ctx.channel_id())
+            .timeout(std::time::Duration::from_secs(30 * 24 * 60 * 60)) // 30 days
+            .filter(move |mci| mci.data.custom_id == custom_id_.clone())
+            .await
+        {
+            let res = client
+                .post(format!(
+                    "{}/api/admin/add-to-ctf",
+                    &config.ctfnote.ctfnote_extra_url
+                ))
+                .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
+                .json(&AddDiscordUserToCtfRequest {
+                    discord_id: mci.user.id.to_string(),
+                    ctf_id: ctf.id
+
+                })
+                .send()
+                .await?;
+            let response = res.json::<AddDiscordUserToCtfResponse>().await?;
+            mci.create_response(ctx, CreateInteractionResponse::Message(CreateInteractionResponseMessage::default().content(response.message))).await?;
+
+            custom_id_ = custom_id.clone();
+        }
     }
 
     Ok(())
