@@ -3,11 +3,13 @@ use std::vec;
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use poise::{
     serenity_prelude::{
-        ComponentInteractionCollector, CreateActionRow, CreateButton, CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, Error
+        ComponentInteractionCollector, CreateActionRow, CreateButton, CreateEmbed,
+        CreateInteractionResponse, CreateInteractionResponseMessage, Error,
     },
     CreateReply,
 };
 use serde::{Deserialize, Serialize};
+use slug::slugify;
 
 use crate::Context;
 
@@ -29,13 +31,13 @@ pub async fn ctfnote_link(
     #[description = "Your CTFNote account token (found in your profile)"] token: String,
 ) -> Result<(), Error> {
     let config = &ctx.data().config;
-    let ctfnote_extra_url = &config.ctfnote.ctfnote_extra_url;
+    let ctfnote_url = &config.ctfnote.ctfnote_url;
     let ctfnote_admin_api_password = &config.ctfnote.ctfnote_admin_api_password;
 
     let discord_id = ctx.author().id;
     let client = reqwest::Client::new();
     let res = client
-        .post(format!("{}/api/admin/link-discord", ctfnote_extra_url))
+        .post(format!("{}/extra/api/admin/link-discord", ctfnote_url))
         .basic_auth("admin", Some(ctfnote_admin_api_password))
         .json(&CtfnoteLinkRequest {
             token: token.to_string(),
@@ -88,12 +90,12 @@ struct JwtClaim {
 #[poise::command(slash_command)]
 pub async fn ctfnote_login(ctx: Context<'_>) -> Result<(), Error> {
     let config = &ctx.data().config;
-    let ctfnote_extra_url = &config.ctfnote.ctfnote_extra_url;
+    let ctfnote_url = &config.ctfnote.ctfnote_url;
     let ctfnote_admin_api_password = &config.ctfnote.ctfnote_admin_api_password;
 
     let discord_id = ctx.author().id;
     let client = reqwest::Client::new();
-    let token_endpoint = format!("{}/api/admin/get-token", ctfnote_extra_url);
+    let token_endpoint = format!("{}/extra/api/admin/get-token", ctfnote_url);
     let res = client
         .post(&token_endpoint)
         .basic_auth("admin", Some(ctfnote_admin_api_password))
@@ -107,8 +109,8 @@ pub async fn ctfnote_login(ctx: Context<'_>) -> Result<(), Error> {
     match token {
         Some(token) => {
             ctx.send(CreateReply::default().ephemeral(true).content(format!(
-                "<{}/token-login?token={}>\nExpires <t:{}>",
-                ctfnote_extra_url, token.token, token.exp
+                "<{}/extra/token-login?token={}>\nExpires <t:{}>",
+                ctfnote_url, token.token, token.exp
             )))
             .await?;
         }
@@ -165,8 +167,8 @@ pub async fn ctfnote_create_account(
     let discord_id = author.id;
     let res = client
         .post(format!(
-            "{}/api/admin/register",
-            &config.ctfnote.ctfnote_extra_url
+            "{}/extra/api/admin/register",
+            &config.ctfnote.ctfnote_url
         ))
         .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
         .json(&CtfnoteRegisterRequest {
@@ -235,8 +237,8 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
     let client = reqwest::Client::new();
     let res = client
         .get(format!(
-            "{}/api/admin/role",
-            &config.ctfnote.ctfnote_extra_url
+            "{}/extra/api/admin/role",
+            &config.ctfnote.ctfnote_url
         ))
         .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
         .query(&GetRoleForDiscordUserRequest {
@@ -257,8 +259,8 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
 
     let res = client
         .get(format!(
-            "{}/api/admin/upcoming-ctf",
-            &config.ctfnote.ctfnote_extra_url
+            "{}/extra/api/admin/upcoming-ctf",
+            &config.ctfnote.ctfnote_url
         ))
         .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
         .send()
@@ -272,32 +274,34 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
 
     for ctf in response.0 {
         let custom_id = format!("ctfnote_join_ctf:{}", ctf.id);
-        let reply = ctx.send(
-            CreateReply::default()
-                .embed(
-                    CreateEmbed::new()
-                        .title(&ctf.title)
-                        .description(&ctf.description)
-                        .thumbnail(&ctf.logo_url)
-                        .field(
-                            "Dates",
-                            format!(
-                                "Starts: <t:{}:f>.\n Ends: <t:{}:f>",
-                                ctf.start_time.timestamp(),
-                                ctf.end_time.timestamp(),
-                            ),
-                            true,
-                        )
-                        .field("CTF Page", &ctf.ctf_url, true)
-                        .url(&ctf.ctftime_url)
-                        .fields([("Weight", &ctf.weight.to_string(), true)]),
-                )
-                .components(vec![CreateActionRow::Buttons(vec![CreateButton::new(
-                    custom_id.clone(),
-                )
-                .label("Join on CTFNote")])]),
-        )
-        .await?;
+        let ctfnote_link = format!("{}/#/ctf/{}-{}", config.ctfnote.ctfnote_url, ctf.id, slugify(&ctf.title));
+        let reply = ctx
+            .send(
+                CreateReply::default()
+                    .embed(
+                        CreateEmbed::new()
+                            .title(&ctf.title)
+                            .description(&ctf.description)
+                            .thumbnail(&ctf.logo_url)
+                            .field(
+                                "Dates",
+                                format!(
+                                    "Starts: <t:{}:f>.\n Ends: <t:{}:f>",
+                                    ctf.start_time.timestamp(),
+                                    ctf.end_time.timestamp(),
+                                ),
+                                true,
+                            )
+                            .field("CTF Page", &ctf.ctf_url, true)
+                            .url(&ctf.ctftime_url)
+                            .fields([("Weight", &ctf.weight.to_string(), true)]),
+                    )
+                    .components(vec![CreateActionRow::Buttons(vec![
+                        CreateButton::new(custom_id.clone()).label("Join on CTFNote"),
+                        CreateButton::new_link(ctfnote_link).label("View on CTFNote"),
+                    ])]),
+            )
+            .await?;
 
         let mut custom_id_ = custom_id.clone();
         while let Some(mci) = ComponentInteractionCollector::new(ctx)
@@ -310,19 +314,24 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
         {
             let res = client
                 .post(format!(
-                    "{}/api/admin/add-to-ctf",
-                    &config.ctfnote.ctfnote_extra_url
+                    "{}/extra/api/admin/add-to-ctf",
+                    &config.ctfnote.ctfnote_url
                 ))
                 .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
                 .json(&AddDiscordUserToCtfRequest {
                     discord_id: mci.user.id.to_string(),
-                    ctf_id: ctf.id
-
+                    ctf_id: ctf.id,
                 })
                 .send()
                 .await?;
             let response = res.json::<AddDiscordUserToCtfResponse>().await?;
-            mci.create_response(ctx, CreateInteractionResponse::Message(CreateInteractionResponseMessage::default().content(response.message))).await?;
+            mci.create_response(
+                ctx,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::default().content(response.message),
+                ),
+            )
+            .await?;
 
             custom_id_ = custom_id.clone();
         }

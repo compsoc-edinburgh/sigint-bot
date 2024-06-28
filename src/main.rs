@@ -73,7 +73,7 @@ pub(crate) struct WelcomeConfig {
 
 #[derive(Deserialize, Clone)]
 pub(crate) struct CtfnoteConfig {
-    ctfnote_extra_url: String,
+    ctfnote_url: String,
     ctfnote_admin_api_password: String,
 }
 
