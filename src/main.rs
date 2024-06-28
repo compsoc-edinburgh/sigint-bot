@@ -7,7 +7,7 @@ mod commands;
 
 use chrono::Utc;
 use commands::{
-    ctfnote::{ctfnote_create_account, ctfnote_link, ctfnote_login},
+    ctfnote::{ctfnote_create_account, ctfnote_link, ctfnote_login, ctfnote_announce_upcoming},
     ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame},
     register_commands::register_slash_commands,
     welcome,
@@ -112,6 +112,7 @@ async fn main() {
                 ctfnote_link(),
                 ctfnote_login(),
                 ctfnote_create_account(),
+                ctfnote_announce_upcoming(),
             ],
             prefix_options: PrefixFrameworkOptions {
                 prefix: Some("!".to_string()),

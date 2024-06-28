@@ -1,4 +1,8 @@
-use poise::{serenity_prelude::Error, CreateReply};
+use chrono::{serde::ts_seconds, DateTime, Utc};
+use poise::{
+    serenity_prelude::{CreateEmbed, Error},
+    CreateReply,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::Context;
@@ -98,11 +102,10 @@ pub async fn ctfnote_login(ctx: Context<'_>) -> Result<(), Error> {
     let token = response.token;
     match token {
         Some(token) => {
-            ctx.send(
-                CreateReply::default()
-                    .ephemeral(true)
-                    .content(format!("<{}/token-login?token={}>\nExpires <t:{}>", ctfnote_extra_url, token.token, token.exp)),
-            )
+            ctx.send(CreateReply::default().ephemeral(true).content(format!(
+                "<{}/token-login?token={}>\nExpires <t:{}>",
+                ctfnote_extra_url, token.token, token.exp
+            )))
             .await?;
         }
         None => {
@@ -124,7 +127,7 @@ struct CtfnoteRegisterRequest {
     discord_id: String,
 }
 
-#[derive(Deserialize)] 
+#[derive(Deserialize)]
 struct CtfnoteRegisterResponse {
     message: String,
 }
@@ -133,7 +136,7 @@ struct CtfnoteRegisterResponse {
 #[poise::command(slash_command, guild_only)]
 pub async fn ctfnote_create_account(
     ctx: Context<'_>,
-    #[description = "Username"] username: Option<String>
+    #[description = "Username"] username: Option<String>,
 ) -> Result<(), Error> {
     let config = &ctx.data().config;
 
@@ -141,7 +144,11 @@ pub async fn ctfnote_create_account(
     let team_channel_id = config.team_channel_id;
     let channel_id = ctx.channel_id().get();
     if channel_id != team_channel_id {
-        ctx.reply(format!("You can only run this command in team channel <#{}>", team_channel_id)).await?;
+        ctx.reply(format!(
+            "You can only run this command in team channel <#{}>",
+            team_channel_id
+        ))
+        .await?;
         return Ok(());
     }
 
@@ -153,7 +160,10 @@ pub async fn ctfnote_create_account(
     };
     let discord_id = author.id;
     let res = client
-        .post(format!("{}/api/admin/register", &config.ctfnote.ctfnote_extra_url))
+        .post(format!(
+            "{}/api/admin/register",
+            &config.ctfnote.ctfnote_extra_url
+        ))
         .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
         .json(&CtfnoteRegisterRequest {
             username,
@@ -163,6 +173,113 @@ pub async fn ctfnote_create_account(
         .await?;
     let response = res.json::<CtfnoteRegisterResponse>().await?;
     ctx.reply(format!("{}", response.message)).await?;
+
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[allow(dead_code)]
+struct GetRoleForDiscordUserRequest {
+    discord_id: String,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct GetRoleForDiscordUserResponse {
+    role: Option<String>,
+    message: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+struct Ctf {
+    id: i32,
+    title: String,
+    weight: f64,
+    ctf_url: String,
+    logo_url: String,
+    ctftime_url: String,
+    description: String,
+    #[serde(with = "ts_seconds")]
+    start_time: DateTime<Utc>,
+    #[serde(with = "ts_seconds")]
+    end_time: DateTime<Utc>,
+    // secrets_id: foreign key
+}
+
+#[derive(Deserialize)]
+struct GetUpcomingCtfResponse(Vec<Ctf>);
+
+/// Announce upcoming CTFs on CTFNote in the channel
+#[poise::command(slash_command, guild_only)]
+pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
+    let config = &ctx.data().config;
+
+    // only CTFNote manager or admin can announce
+    let discord_id = ctx.author().id;
+    let client = reqwest::Client::new();
+    let res = client
+        .get(format!(
+            "{}/api/admin/role",
+            &config.ctfnote.ctfnote_extra_url
+        ))
+        .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
+        .query(&GetRoleForDiscordUserRequest {
+            discord_id: discord_id.to_string(),
+        })
+        .send()
+        .await?;
+    let response = res.json::<GetRoleForDiscordUserResponse>().await?;
+    let role = response.role;
+    let role_string = role.unwrap_or("".to_string());
+    if role_string != "user_manager" && role_string != "user_admin" {
+        ctx.reply(
+            "You need to be CTFNote manager or admin, or your Discord is not linked to CTFNote",
+        )
+        .await?;
+        return Ok(());
+    }
+
+    let res = client
+        .get(format!(
+            "{}/api/admin/upcoming-ctf",
+            &config.ctfnote.ctfnote_extra_url
+        ))
+        .basic_auth("admin", Some(&config.ctfnote.ctfnote_admin_api_password))
+        .send()
+        .await?;
+    let response = res.json::<GetUpcomingCtfResponse>().await?;
+
+    if response.0.len() == 0 {
+        ctx.reply("No upcoming CTFs on CTFNote.").await?;
+        return Ok(());
+    }
+
+    for ctf in response.0 {
+        ctx.send(
+            CreateReply::default().embed(
+                CreateEmbed::new()
+                    .title(&ctf.title)
+                    .description(&ctf.description)
+                    .thumbnail(&ctf.logo_url)
+                    .field(
+                        "Dates",
+                        format!(
+                            "Starts: <t:{}:f>.\n Ends: <t:{}:f>",
+                            ctf.start_time.timestamp(),
+                            ctf.end_time.timestamp(),
+                        ),
+                        true,
+                    )
+                    .field("CTF Page", &ctf.ctf_url, true)
+                    .url(&ctf.ctftime_url)
+                    .fields([
+                        ("Weight", &ctf.weight.to_string(), true),
+                    ]),
+            ),
+        )
+        .await?;
+    }
 
     Ok(())
 }
