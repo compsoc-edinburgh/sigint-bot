@@ -3,8 +3,8 @@ use std::vec;
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use poise::{
     serenity_prelude::{
-        ComponentInteractionCollector, CreateActionRow, CreateButton, CreateEmbed,
-        CreateInteractionResponse, CreateInteractionResponseMessage, Error,
+        ComponentInteractionCollector, CreateActionRow, CreateAllowedMentions, CreateButton,
+        CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, Error,
     },
     CreateReply,
 };
@@ -274,7 +274,12 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
 
     for ctf in response.0 {
         let custom_id = format!("ctfnote_join_ctf:{}", ctf.id);
-        let ctfnote_link = format!("{}/#/ctf/{}-{}", config.ctfnote.ctfnote_url, ctf.id, slugify(&ctf.title));
+        let ctfnote_link = format!(
+            "{}/#/ctf/{}-{}",
+            config.ctfnote.ctfnote_url,
+            ctf.id,
+            slugify(&ctf.title)
+        );
         let reply = ctx
             .send(
                 CreateReply::default()
@@ -328,7 +333,9 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
             mci.create_response(
                 ctx,
                 CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::default().content(response.message),
+                    CreateInteractionResponseMessage::default()
+                        .allowed_mentions(CreateAllowedMentions::new().users(vec![mci.user.id]))
+                        .content(format!("<@{}> {}", mci.user.id, response.message)),
                 ),
             )
             .await?;
