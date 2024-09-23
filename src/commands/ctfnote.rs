@@ -280,7 +280,7 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
             ctf.id,
             slugify(&ctf.title)
         );
-        let reply = ctx
+        ctx
             .send(
                 CreateReply::default()
                     .embed(
@@ -310,7 +310,6 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
 
         let mut custom_id_ = custom_id.clone();
         while let Some(mci) = ComponentInteractionCollector::new(ctx)
-            .message_id(reply.message().await.unwrap().id)
             .guild_id(ctx.guild_id().unwrap())
             .channel_id(ctx.channel_id())
             .timeout(std::time::Duration::from_secs(30 * 24 * 60 * 60)) // 30 days
