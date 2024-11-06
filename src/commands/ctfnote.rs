@@ -202,9 +202,9 @@ struct Ctf {
     id: i32,
     title: String,
     weight: f64,
-    ctf_url: String,
-    logo_url: String,
-    ctftime_url: String,
+    ctf_url: Option<String>,
+    logo_url: Option<String>,
+    ctftime_url: Option<String>,
     description: String,
     #[serde(with = "ts_seconds")]
     start_time: DateTime<Utc>,
@@ -280,33 +280,37 @@ pub async fn ctfnote_announce_upcoming(ctx: Context<'_>) -> Result<(), Error> {
             ctf.id,
             slugify(&ctf.title)
         );
-        ctx
-            .send(
-                CreateReply::default()
-                    .embed(
-                        CreateEmbed::new()
-                            .title(&ctf.title)
-                            .description(&ctf.description)
-                            .thumbnail(&ctf.logo_url)
-                            .field(
-                                "Dates",
-                                format!(
-                                    "Starts: <t:{}:f>.\n Ends: <t:{}:f>",
-                                    ctf.start_time.timestamp(),
-                                    ctf.end_time.timestamp(),
-                                ),
-                                true,
-                            )
-                            .field("CTF Page", &ctf.ctf_url, true)
-                            .url(&ctf.ctftime_url)
-                            .fields([("Weight", &ctf.weight.to_string(), true)]),
-                    )
-                    .components(vec![CreateActionRow::Buttons(vec![
-                        CreateButton::new(custom_id.clone()).label("Join on CTFNote"),
-                        CreateButton::new_link(ctfnote_link).label("View on CTFNote"),
-                    ])]),
+        let mut embed = CreateEmbed::new()
+            .title(&ctf.title)
+            .description(&ctf.description)
+            .field(
+                "Dates",
+                format!(
+                    "Starts: <t:{}:f>.\n Ends: <t:{}:f>",
+                    ctf.start_time.timestamp(),
+                    ctf.end_time.timestamp(),
+                ),
+                true,
             )
-            .await?;
+            .fields([("Weight", &ctf.weight.to_string(), true)]);
+        if ctf.ctftime_url.is_some() {
+            embed = embed.url(ctf.ctftime_url.unwrap());
+        }
+        if ctf.logo_url.is_some() {
+            embed = embed.thumbnail(&ctf.logo_url.unwrap());
+        }
+        if ctf.ctf_url.is_some() {
+            embed = embed.field("CTF Page", ctf.ctf_url.unwrap(), true);
+        }
+        ctx.send(
+            CreateReply::default()
+                .embed(embed)
+                .components(vec![CreateActionRow::Buttons(vec![
+                    CreateButton::new(custom_id.clone()).label("Join on CTFNote"),
+                    CreateButton::new_link(ctfnote_link).label("View on CTFNote"),
+                ])]),
+        )
+        .await?;
 
         let mut custom_id_ = custom_id.clone();
         while let Some(mci) = ComponentInteractionCollector::new(ctx)
