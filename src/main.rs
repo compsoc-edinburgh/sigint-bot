@@ -63,6 +63,7 @@ pub(crate) struct Config {
     ctftime_loop_seconds: u64,
     ctfnote: CtfnoteConfig,
     team_channel_id: u64,
+    calendar: CalendarConfig,
 }
 
 #[derive(Deserialize, Clone)]
@@ -75,6 +76,13 @@ pub(crate) struct WelcomeConfig {
 pub(crate) struct CtfnoteConfig {
     ctfnote_url: String,
     ctfnote_admin_api_password: String,
+}
+
+#[derive(Deserialize, Clone)]
+pub(crate) struct CalendarConfig {
+    calendar_loop_seconds: u64,
+    calendar_check_seconds: u64,
+    calendar_id: String,
 }
 
 // Custom user data passed to all command functions
