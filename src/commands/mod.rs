@@ -3,3 +3,4 @@ pub mod ctftime;
 pub mod register_commands;
 pub mod welcome;
 pub mod ctfnote;
+pub mod calendar;

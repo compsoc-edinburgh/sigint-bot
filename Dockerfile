@@ -28,7 +28,6 @@ RUN groupadd $APP_USER \
     && mkdir -p ${APP}
 
 COPY --from=builder /sigint-bot/target/release/sigint-bot ${APP}/sigint-bot
-COPY ./config.toml ${APP}/config.toml
 
 RUN chown -R $APP_USER:$APP_USER ${APP}
 

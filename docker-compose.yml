@@ -3,3 +3,5 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
+    volumes:
+      - ./config.toml:/usr/src/app/config.toml
