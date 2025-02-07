@@ -7,10 +7,7 @@ mod commands;
 
 use chrono::Utc;
 use commands::{
-    ctfnote::{ctfnote_create_account, ctfnote_link, ctfnote_login, ctfnote_announce_upcoming},
-    ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame},
-    register_commands::register_slash_commands,
-    welcome,
+    calendar::calendar_reminder_loop, ctfnote::{ctfnote_announce_upcoming, ctfnote_create_account, ctfnote_link, ctfnote_login}, ctftime::{generate_embed, get_upcoming_ctf, Ctf, TimeFrame}, register_commands::register_slash_commands, welcome
 };
 use poise::{
     serenity_prelude::{
@@ -83,6 +80,7 @@ pub(crate) struct CalendarConfig {
     calendar_loop_seconds: u64,
     calendar_check_seconds: u64,
     calendar_id: String,
+    google_api_key: String,
 }
 
 // Custom user data passed to all command functions
@@ -105,7 +103,6 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
     let config_clone = config.clone();
-    let config_clone_2 = config.clone();
     let guild_id = config.guild_id;
 
     // Create the framework
@@ -135,9 +132,10 @@ async fn main() {
         .setup(move |ctx, _ready, _framework| {
             Box::pin(async move {
                 poise::builtins::register_in_guild(ctx.http(), &_framework.options().commands, GuildId::new(guild_id)).await?;
-                post_ctf_loop(config_clone, ctx.clone());
+                post_ctf_loop(config_clone.clone(), ctx.clone());
+                calendar_reminder_loop(config_clone.calendar.clone(), ctx.clone());
                 Ok(Data {
-                    config: config_clone_2,
+                    config: config_clone,
                 })
             })
         })

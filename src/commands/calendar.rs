@@ -3,7 +3,9 @@ use std::vec;
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use poise::{
     serenity_prelude::{
-        ChannelId, ComponentInteractionCollector, CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage, Error
+        ChannelId, ComponentInteractionCollector, CreateActionRow, CreateAllowedMentions,
+        CreateButton, CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage,
+        CreateMessage, Error,
     },
     CreateReply,
 };
@@ -14,31 +16,68 @@ use tracing::info;
 use crate::{CalendarConfig, Config, Context};
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct Events {
-    
+struct Events {}
+
+#[derive(Deserialize, Debug, Clone)]
+struct Event {
+    html_link: String,
+    summary: String,
+    description: String,
+    location: String,
+    start: EventTime,
+    end: EventTime,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct EventTime {
+    date_time: DateTime<Utc>,
 }
 
 impl Events {
-    pub async fn get_events(calendar_id: &str) -> () {
+    pub async fn get_events(calendar_id: &str, token: &str) -> () {
         let url = format!(
             "https://www.googleapis.com/calendar/v3/calendars/{}/events",
             calendar_id,
         );
-        let result = reqwest::get(url).await.unwrap();
+        let result = reqwest::get(
+            reqwest::Url::parse_with_params(
+                &url,
+                [
+                    ("key", token),
+                    // ("orderBy", "startTime"),
+                    ("singleEvents", "true"),
+                    ("timeMin", &chrono::Utc::now().to_rfc3339()),
+                ],
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
         println!("{:?}", result);
     }
 }
 
-fn calendar_reminder_loop(calendar_config: CalendarConfig, ctx: poise::serenity_prelude::Context) {
+pub fn calendar_reminder_loop(
+    calendar_config: CalendarConfig,
+    ctx: poise::serenity_prelude::Context,
+) {
     // let user_data = Arc::new(Mutex::new(PostCtfLoopData::new()));
     tokio::spawn(async move {
-        let mut interval =
-            tokio::time::interval(std::time::Duration::from_secs(calendar_config.calendar_loop_seconds));
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+            calendar_config.calendar_loop_seconds,
+        ));
 
         loop {
             interval.tick().await;
 
-            let events = Events::get_events(&calendar_config.calendar_id).await;
+            let events = Events::get_events(
+                &calendar_config.calendar_id,
+                &calendar_config.google_api_key,
+            )
+            .await;
 
             // // Remove all old saved ctfs that are now finished.
             // let mut user_data_locked = user_data.lock().await;
